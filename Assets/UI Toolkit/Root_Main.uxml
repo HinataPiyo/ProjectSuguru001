@@ -1,0 +1,6 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:Template name="Module_TypingDisplayView" src="project://database/Assets/UI%20Toolkit/Module_TypingDisplayView.uxml?fileID=9197481963319205126&amp;guid=14fa5c31ff5c365419d534af5742753d&amp;type=3#Module_TypingDisplayView"/>
+    <ui:VisualElement name="root" style="flex-grow: 1; justify-content: center;">
+        <ui:Instance template="Module_TypingDisplayView"/>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,7 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI%20Toolkit/Style/typing_display_view.uss?fileID=7433441132597879392&amp;guid=7b358f643c2e542468db49a756165736&amp;type=3#typing_display_view"/>
+    <ui:VisualElement name="root" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.502); justify-content: center;">
+        <ui:Label text="ここに文章が表示されます" name="sentence-text-value" class="basic_text"/>
+        <ui:Label text="kokonibunnshougahyoujisaremasu" name="romanized-sentence-text-value" class="basic_text basic_caret"/>
+    </ui:VisualElement>
+</ui:UXML>
