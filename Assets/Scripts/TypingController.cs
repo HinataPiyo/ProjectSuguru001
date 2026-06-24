@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System.Collections.Generic;
 using System.Text;
 
 public class TypingController : MonoBehaviour
@@ -8,6 +9,7 @@ public class TypingController : MonoBehaviour
     int currentKanaIndex = 0;
     string currentKanaInput = "";
     string rubySentence = "";
+    readonly List<string> rubyUnits = new List<string>();
 
     [SerializeField] QuestionController questionCTRL;
 
@@ -60,6 +62,7 @@ public class TypingController : MonoBehaviour
         currentKanaIndex = 0;
         currentKanaInput = "";
         rubySentence = ruby ?? "";
+        BuildRubyUnits();
         UpdateInputText();
     }
 
@@ -84,7 +87,7 @@ public class TypingController : MonoBehaviour
         UpdateInputText();
 
         // 入力が完了しているかどうかを判定する
-        if(currentKanaIndex >= rubySentence.Length)
+        if(currentKanaIndex >= rubyUnits.Count)
         {
             questionCTRL.CompleteQuestion();
         }
@@ -102,15 +105,15 @@ public class TypingController : MonoBehaviour
 
     string BuildRemainingRomanizedGuide()
     {
-        if (string.IsNullOrEmpty(rubySentence)) return "";
+        if (rubyUnits.Count == 0) return "";
 
         StringBuilder builder = new StringBuilder();
 
-        // 現在のかな文字から残りの文字列を構築する
-        for (int i = currentKanaIndex; i < rubySentence.Length; i++)
+        // 現在のかな単位から残りの文字列を構築する
+        for (int i = currentKanaIndex; i < rubyUnits.Count; i++)
         {
-            char kana = rubySentence[i];
-            // かな文字に対応するローマ字候補を取得し、最初の候補を表示する
+            string kana = rubyUnits[i];
+            // かな単位に対応するローマ字候補を取得し、最初の候補を表示する
             if (HiraganaRomajiDictionary.TryGetCandidates(kana, out var candidates) && candidates.Length > 0)
             {
                 string head = candidates[0];
@@ -157,10 +160,10 @@ public class TypingController : MonoBehaviour
     /// </summary>
     bool TryConsumeRomanInput(char key)
     {
-        if (currentKanaIndex >= rubySentence.Length) return false;      //  すでに全てのかなを入力済みの場合はfalseを返す
+        if (currentKanaIndex >= rubyUnits.Count) return false;      //  すでに全てのかなを入力済みの場合はfalseを返す
 
-        char kana = rubySentence[currentKanaIndex];     // 現在のかな文字を取得
-        if (!HiraganaRomajiDictionary.TryGetCandidates(kana, out var candidates)) return false;     // かな文字に対応するローマ字候補が存在しない場合はfalseを返す
+        string[] candidates = GetCandidatesForCurrentKana();
+        if (candidates.Length == 0) return false;     // かな文字に対応するローマ字候補が存在しない場合はfalseを返す
 
         string nextInput = currentKanaInput + key;
         bool hasPrefix = false;
@@ -190,6 +193,89 @@ public class TypingController : MonoBehaviour
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 現在のかな文字に対応するローマ字候補を取得する
+    /// かな文字が促音（っ）の場合は、次のかな文字のローマ字候補の頭文字も含めて取得する
+    /// </summary>
+    /// <returns></returns>
+    string[] GetCandidatesForCurrentKana()
+    {
+        if (currentKanaIndex >= rubyUnits.Count)
+        {
+            return new string[0];
+        }
+
+        string kana = rubyUnits[currentKanaIndex];
+
+        // かな文字に対応するローマ字候補を取得する
+        if (!HiraganaRomajiDictionary.TryGetCandidates(kana, out var candidates))
+        {
+            return new string[0];
+        }
+
+        // 促音（っ）の場合は、次のかな文字のローマ字候補の頭文字も含めて取得する
+        if (kana != "っ")
+        {
+            return candidates;
+        }
+
+        List<string> mergedCandidates = new List<string>(candidates);
+
+        // 次のかな文字のローマ字候補の頭文字を取得する
+        if (currentKanaIndex + 1 < rubyUnits.Count &&
+            HiraganaRomajiDictionary.TryGetCandidates(rubyUnits[currentKanaIndex + 1], out var nextCandidates))
+        {
+            foreach (var nextCandidate in nextCandidates)
+            {
+                if (string.IsNullOrEmpty(nextCandidate)) continue;
+
+                char initial = nextCandidate[0];
+
+                // 促音の後に続く文字が母音や長音記号でない場合のみ、頭文字を追加する
+                if (IsSokuonCandidateInitial(initial) && !mergedCandidates.Contains(initial.ToString()))
+                {
+                    mergedCandidates.Add(initial.ToString());
+                }
+            }
+        }
+
+        return mergedCandidates.ToArray();
+    }
+
+    /// <summary>
+    /// 促音の後に続く文字が母音や長音記号でないかどうかを判定する
+    /// </summary>
+    bool IsSokuonCandidateInitial(char initial)
+    {
+        return !(initial == 'a' || initial == 'i' || initial == 'u' || initial == 'e' || initial == 'o' || initial == '-');
+    }
+
+    /// <summary>
+    /// かな文字列を単位ごとに分割してリストに格納する
+    /// </summary>
+    void BuildRubyUnits()
+    {
+        rubyUnits.Clear();
+
+        for (int i = 0; i < rubySentence.Length; i++)
+        {
+            if (i + 1 < rubySentence.Length)
+            {
+                // 2文字のかな文字が存在する場合は、2文字のかな文字を優先して取得する
+                string pair = rubySentence.Substring(i, 2);
+                if (HiraganaRomajiDictionary.TryGetCandidates(pair, out _))
+                {
+                    rubyUnits.Add(pair);
+                    i++;
+                    continue;
+                }
+            }
+
+            // 2文字のかな文字が存在しない場合は、1文字のかな文字を取得する
+            rubyUnits.Add(rubySentence[i].ToString());
+        }
     }
 
 }
