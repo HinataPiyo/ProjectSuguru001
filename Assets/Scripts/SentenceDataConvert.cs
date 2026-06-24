@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,19 +13,16 @@ public class SentenceDataConvert : MonoBehaviour
 
     List<Entry> entries = new List<Entry>();
 
-    void Start()
-    {
-        LoadCSV();
-    }
+    public List<Entry> Questions => entries;
 
-    void LoadCSV()
+    public IEnumerator LoadCSV()
     {
         TextAsset csvFile = Resources.Load<TextAsset>("Sentence/000_Test_Sentence");
 
         if (csvFile == null)
         {
             Debug.LogError("CSVの読み込みに失敗しました: Resources/Sentence/000_Test_Sentence.csv を確認してください。");
-            return;
+            yield break;
         }
 
         string[] lines = csvFile.text.Split('\n');

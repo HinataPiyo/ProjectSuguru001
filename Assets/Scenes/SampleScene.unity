@@ -351,6 +351,7 @@ GameObject:
   - component: {fileID: 926171141}
   - component: {fileID: 926171140}
   - component: {fileID: 926171142}
+  - component: {fileID: 926171143}
   m_Layer: 5
   m_Name: MainUI
   m_TagString: Untagged
@@ -408,6 +409,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2ddba9ece3a30374caa1d10d64f720fa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TypingController
+  questionCTRL: {fileID: 926171143}
+--- !u!114 &926171143
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 926171139}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21a4078d4f27cf841bc4de979656f3ba, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::QuestionController
+  sentenceDataConvert: {fileID: 972064053}
 --- !u!1 &972064052
 GameObject:
   m_ObjectHideFlags: 0

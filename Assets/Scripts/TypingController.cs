@@ -1,42 +1,34 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.UIElements;
 using System.Text;
 
 public class TypingController : MonoBehaviour
 {
-    UIDocument uiDoc;
-
-    Label sentenceText;
-    Label romanizedSentenceText;
-
-    string sentence = "こんにちはタイピングゲームへ";
-    string rubySentence = "こんにちはたいぴんぐげーむへ";
     string inputKey = "";
     int currentKanaIndex = 0;
     string currentKanaInput = "";
+    string rubySentence = "";
+
+    [SerializeField] QuestionController questionCTRL;
 
     void Awake()
     {
-        uiDoc = GetComponent<UIDocument>();
+        if (questionCTRL == null)
+        {
+            questionCTRL = GetComponent<QuestionController>();
+        }
     }
+
+    
 
     void OnEnable()
     {
-        var r = uiDoc.rootVisualElement;
-        sentenceText = r.Q<Label>("sentence-text-value");
-        romanizedSentenceText = r.Q<Label>("romanized-sentence-text-value");
+        ResetTypingState(questionCTRL != null ? questionCTRL.CurrentRuby : "");
 
-        //! テスト: 問題文と問題文のひらがな表記を表示
-        sentenceText.text = sentence;
-        romanizedSentenceText.text = BuildRemainingRomanizedGuide();
-
-        inputKey = "";
-        currentKanaIndex = 0;
-        currentKanaInput = "";
-
-        // 入力された文字列と残りの文字列を表示する
-        UpdateInputText();
+        if (questionCTRL != null)
+        {
+            questionCTRL.OnQuestionChanged += OnQuestionChanged;
+        }
 
         if (Keyboard.current != null)
         {
@@ -46,10 +38,29 @@ public class TypingController : MonoBehaviour
 
     void OnDisable()
     {
+        if (questionCTRL != null)
+        {
+            questionCTRL.OnQuestionChanged -= OnQuestionChanged;
+        }
+
         if (Keyboard.current != null)
         {
             Keyboard.current.onTextInput -= OnTextInput;        // 入力イベントの解除
         }
+    }
+
+    void OnQuestionChanged(string ruby)
+    {
+        ResetTypingState(ruby);
+    }
+
+    void ResetTypingState(string ruby)
+    {
+        inputKey = "";
+        currentKanaIndex = 0;
+        currentKanaInput = "";
+        rubySentence = ruby ?? "";
+        UpdateInputText();
     }
 
     /// <summary>
@@ -58,6 +69,9 @@ public class TypingController : MonoBehaviour
     /// <param name="currentKey">入力された文字</param>
     void OnTextInput(char currentKey)
     {
+        if (questionCTRL == null) return;
+        if(questionCTRL.IsCompleted) return;      // 入力が完了している場合は処理を終了
+
         char normalizedKey = char.ToLowerInvariant(currentKey);
         if (!IsSupportedInputChar(normalizedKey)) return;
 
@@ -68,6 +82,12 @@ public class TypingController : MonoBehaviour
 
         inputKey += normalizedKey;
         UpdateInputText();
+
+        // 入力が完了しているかどうかを判定する
+        if(currentKanaIndex >= rubySentence.Length)
+        {
+            questionCTRL.CompleteQuestion();
+        }
     }
 
     /// <summary>
@@ -77,7 +97,51 @@ public class TypingController : MonoBehaviour
     {
         string typed = inputKey;        // 入力された文字列を取得
         string remaining = BuildRemainingRomanizedGuide();
-        romanizedSentenceText.text = $"<color=#00FF00>{typed}</color><color=#FFFFFF>{remaining}</color>";
+        questionCTRL.SetRomanizedSentenceText($"<color=#00FF00>{typed}</color><color=#FFFFFF>{remaining}</color>");
+    }
+
+    string BuildRemainingRomanizedGuide()
+    {
+        if (string.IsNullOrEmpty(rubySentence)) return "";
+
+        StringBuilder builder = new StringBuilder();
+
+        // 現在のかな文字から残りの文字列を構築する
+        for (int i = currentKanaIndex; i < rubySentence.Length; i++)
+        {
+            char kana = rubySentence[i];
+            // かな文字に対応するローマ字候補を取得し、最初の候補を表示する
+            if (HiraganaRomajiDictionary.TryGetCandidates(kana, out var candidates) && candidates.Length > 0)
+            {
+                string head = candidates[0];
+
+                // 現在の入力文字列が候補の接頭一致する場合は、残りの文字列を表示する
+                if (i == currentKanaIndex && !string.IsNullOrEmpty(currentKanaInput))
+                {
+                    if (head.StartsWith(currentKanaInput))
+                    {
+                        // 入力済みの文字列を除いた残りの文字列を表示する
+                        builder.Append(head.Substring(currentKanaInput.Length));
+                    }
+                    else
+                    {
+                        builder.Append(head);
+                    }
+                }
+                else
+                {
+                    // 入力済みの文字列がない場合は、候補の最初の文字列を表示する
+                    builder.Append(head);
+                }
+            }
+            else
+            {
+                // かな文字に対応するローマ字候補が存在しない場合は、かな文字自体を表示する
+                builder.Append(kana);
+            }
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>
@@ -128,51 +192,4 @@ public class TypingController : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 残りのかなをガイド用ローマ字に変換して返す
-    /// </summary>
-    string BuildRemainingRomanizedGuide()
-    {
-        if (currentKanaIndex >= rubySentence.Length) return "";     // すでに全てのかなを入力済みの場合は空文字を返す
-
-        var sb = new StringBuilder();
-
-        char currentKana = rubySentence[currentKanaIndex];
-
-        // 現在のかな文字に対応するローマ字候補を取得し、最初の候補をガイド用ローマ字として使用する
-        if (HiraganaRomajiDictionary.TryGetCandidates(currentKana, out var currentCandidates) && currentCandidates.Length > 0)
-        {
-            string currentGuide = currentCandidates[0];
-
-            // 現在のかな文字に対応するローマ字候補の中で、入力された文字列が接頭一致する場合は、ガイド用ローマ字から入力済みの文字列を削除する
-            if (currentGuide.StartsWith(currentKanaInput))
-            {
-                currentGuide = currentGuide.Substring(currentKanaInput.Length);
-            }
-            sb.Append(currentGuide);        // 現在のかな文字に対応するローマ字候補の最初の候補をガイド用ローマ字として使用する
-        }
-        else
-        {
-            sb.Append(currentKana);     // 現在のかな文字に対応するローマ字候補が存在しない場合は、かな文字をそのままガイド用ローマ字として使用する
-        }
-
-        // 残りのかな文字に対応するローマ字候補を取得し、最初の候補をガイド用ローマ字として使用する
-        for (int i = currentKanaIndex + 1; i < rubySentence.Length; i++)
-        {
-            char kana = rubySentence[i];
-
-            // かな文字に対応するローマ字候補を取得し、最初の候補をガイド用ローマ字として使用する
-            if (HiraganaRomajiDictionary.TryGetCandidates(kana, out var candidates) && candidates.Length > 0)
-            {
-                sb.Append(candidates[0]);       // かな文字に対応するローマ字候補の最初の候補をガイド用ローマ字として使用する
-            }
-            else
-            {
-                sb.Append(kana);        // かな文字に対応するローマ字候補が存在しない場合は、かな文字をそのままガイド用ローマ字として使用する
-            }
-        }
-
-        return sb.ToString();
-    }
-    
 }
