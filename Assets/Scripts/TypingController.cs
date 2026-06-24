@@ -1,53 +1,55 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
 public class TypingController : MonoBehaviour
 {
+    const string SokuonKana = "っ";
+
     string inputKey = "";
     int currentKanaIndex = 0;
     string currentKanaInput = "";
     string rubySentence = "";
     readonly List<string> rubyUnits = new List<string>();
 
-    [SerializeField] QuestionController questionCTRL;
+    [SerializeField] QuestionController questionController;
 
     void Awake()
     {
-        if (questionCTRL == null)
+        if (questionController == null)
         {
-            questionCTRL = GetComponent<QuestionController>();
+            questionController = GetComponent<QuestionController>();
         }
     }
 
-    
-
     void OnEnable()
     {
-        ResetTypingState(questionCTRL != null ? questionCTRL.CurrentRuby : "");
+        // 現在の問題文に同期してからイベント購読を行う。
+        ResetTypingState(questionController != null ? questionController.CurrentRuby : "");
 
-        if (questionCTRL != null)
+        if (questionController != null)
         {
-            questionCTRL.OnQuestionChanged += OnQuestionChanged;
+            questionController.OnQuestionChanged += OnQuestionChanged;
         }
 
         if (Keyboard.current != null)
         {
-            Keyboard.current.onTextInput += OnTextInput;        // 入力イベントの登録
+            Keyboard.current.onTextInput += OnTextInput;
         }
     }
 
     void OnDisable()
     {
-        if (questionCTRL != null)
+        if (questionController != null)
         {
-            questionCTRL.OnQuestionChanged -= OnQuestionChanged;
+            questionController.OnQuestionChanged -= OnQuestionChanged;
         }
 
         if (Keyboard.current != null)
         {
-            Keyboard.current.onTextInput -= OnTextInput;        // 入力イベントの解除
+            Keyboard.current.onTextInput -= OnTextInput;
         }
     }
 
@@ -58,6 +60,7 @@ public class TypingController : MonoBehaviour
 
     void ResetTypingState(string ruby)
     {
+        // 問題が切り替わるたびに、入力済み状態とかな分割結果を初期化する。
         inputKey = "";
         currentKanaIndex = 0;
         currentKanaInput = "";
@@ -67,13 +70,12 @@ public class TypingController : MonoBehaviour
     }
 
     /// <summary>
-    /// 入力された文字が正しいかどうかを判定する
+    /// キーボード入力を受け取り、現在の問題に対して入力を1文字進める。
     /// </summary>
     /// <param name="currentKey">入力された文字</param>
     void OnTextInput(char currentKey)
     {
-        if (questionCTRL == null) return;
-        if(questionCTRL.IsCompleted) return;      // 入力が完了している場合は処理を終了
+        if (!CanHandleInput()) return;
 
         char normalizedKey = char.ToLowerInvariant(currentKey);
         if (!IsSupportedInputChar(normalizedKey)) return;
@@ -81,16 +83,23 @@ public class TypingController : MonoBehaviour
         bool isCorrect = TryConsumeRomanInput(normalizedKey);
         Debug.Log($"Input: {normalizedKey}, Correct: {isCorrect}");
 
-        if(!isCorrect) return;      // 入力が正しくない場合は処理を終了
+        if (!isCorrect) return;
 
         inputKey += normalizedKey;
         UpdateInputText();
 
-        // 入力が完了しているかどうかを判定する
-        if(currentKanaIndex >= rubyUnits.Count)
+        if (currentKanaIndex >= rubyUnits.Count)
         {
-            questionCTRL.CompleteQuestion();
+            questionController.CompleteQuestion();
         }
+    }
+
+    /// <summary>
+    /// 問題コントローラーが有効で、かつ現在の問題が未完了の時だけ入力を受け付ける。
+    /// </summary>
+    bool CanHandleInput()
+    {
+        return questionController != null && !questionController.IsCompleted;
     }
 
     /// <summary>
@@ -98,9 +107,10 @@ public class TypingController : MonoBehaviour
     /// </summary>
     void UpdateInputText()
     {
-        string typed = inputKey;        // 入力された文字列を取得
+        // 入力済み部分と未入力部分を色分けしてガイド表示する。
+        string typed = inputKey;
         string remaining = BuildRemainingRomanizedGuide();
-        questionCTRL.SetRomanizedSentenceText($"<color=#00FF00>{typed}</color><color=#FFFFFF>{remaining}</color>");
+        questionController.SetRomanizedSentenceText($"<color=#00FF00>{typed}</color><color=#FFFFFF>{remaining}</color>");
     }
 
     string BuildRemainingRomanizedGuide()
@@ -109,46 +119,34 @@ public class TypingController : MonoBehaviour
 
         StringBuilder builder = new StringBuilder();
 
-        // 現在のかな単位から残りの文字列を構築する
+        // 現在位置以降のかな単位を、表示用の代表ローマ字候補へ変換する。
         for (int i = currentKanaIndex; i < rubyUnits.Count; i++)
         {
-            string kana = rubyUnits[i];
-            // かな単位に対応するローマ字候補を取得し、最初の候補を表示する
-            if (HiraganaRomajiDictionary.TryGetCandidates(kana, out var candidates) && candidates.Length > 0)
-            {
-                string head = candidates[0];
-
-                // 現在の入力文字列が候補の接頭一致する場合は、残りの文字列を表示する
-                if (i == currentKanaIndex && !string.IsNullOrEmpty(currentKanaInput))
-                {
-                    if (head.StartsWith(currentKanaInput))
-                    {
-                        // 入力済みの文字列を除いた残りの文字列を表示する
-                        builder.Append(head.Substring(currentKanaInput.Length));
-                    }
-                    else
-                    {
-                        builder.Append(head);
-                    }
-                }
-                else
-                {
-                    // 入力済みの文字列がない場合は、候補の最初の文字列を表示する
-                    builder.Append(head);
-                }
-            }
-            else
-            {
-                // かな文字に対応するローマ字候補が存在しない場合は、かな文字自体を表示する
-                builder.Append(kana);
-            }
+            builder.Append(GetGuideTextForUnit(i));
         }
 
         return builder.ToString();
     }
 
     /// <summary>
-    /// 入力された文字が正しいかどうかを判定する
+    /// 指定位置のかな単位を、現在の入力状態を踏まえた表示文字列へ変換する。
+    /// </summary>
+    string GetGuideTextForUnit(int unitIndex)
+    {
+        string guide = HiraganaRomajiDictionary.GetPrimaryCandidateOrKana(rubyUnits[unitIndex]);
+
+        if (unitIndex != currentKanaIndex || string.IsNullOrEmpty(currentKanaInput))
+        {
+            return guide;
+        }
+
+        return guide.StartsWith(currentKanaInput, StringComparison.Ordinal)
+            ? guide.Substring(currentKanaInput.Length)
+            : guide;
+    }
+
+    /// <summary>
+    /// 英字入力と長音記号入力だけを受け付ける。
     /// </summary>
     bool IsSupportedInputChar(char key)
     {
@@ -156,36 +154,23 @@ public class TypingController : MonoBehaviour
     }
 
     /// <summary>
-    /// かな1文字に対するローマ字候補の接頭一致で入力可否を判定する
+    /// 現在のかな単位に対して、入力中ローマ字の接頭一致を判定する。
     /// </summary>
     bool TryConsumeRomanInput(char key)
     {
-        if (currentKanaIndex >= rubyUnits.Count) return false;      //  すでに全てのかなを入力済みの場合はfalseを返す
+        if (currentKanaIndex >= rubyUnits.Count) return false;
 
         string[] candidates = GetCandidatesForCurrentKana();
-        if (candidates.Length == 0) return false;     // かな文字に対応するローマ字候補が存在しない場合はfalseを返す
+        if (candidates.Length == 0) return false;
 
         string nextInput = currentKanaInput + key;
-        bool hasPrefix = false;
-        bool hasExact = false;
+        bool hasPrefix = HasMatchingCandidate(candidates, nextInput, requireExactMatch: false);
+        bool hasExact = HasMatchingCandidate(candidates, nextInput, requireExactMatch: true);
 
-        // かな文字に対応するローマ字候補の中で、入力された文字列が接頭一致するかどうかを判定する
-        foreach (var candidate in candidates)
-        {
-            if (!candidate.StartsWith(nextInput)) continue;
-
-            hasPrefix = true;
-            if (candidate == nextInput)     // 入力された文字列が候補の中に完全一致する場合はhasExactをtrueにする
-            {
-                hasExact = true;
-            }
-        }
-
-        if (!hasPrefix) return false;       // 入力された文字列がどの候補とも接頭一致しない場合はfalseを返す
+        if (!hasPrefix) return false;
 
         currentKanaInput = nextInput;
 
-        // 入力された文字列が候補の中に完全一致する場合は、次のかな文字に進める
         if (hasExact)
         {
             currentKanaIndex++;
@@ -196,34 +181,55 @@ public class TypingController : MonoBehaviour
     }
 
     /// <summary>
+    /// ローマ字候補群に対して、接頭一致または完全一致する候補があるかを調べる。
+    /// </summary>
+    bool HasMatchingCandidate(IEnumerable<string> candidates, string input, bool requireExactMatch)
+    {
+        foreach (var candidate in candidates)
+        {
+            bool isMatch = requireExactMatch
+                ? candidate == input
+                : candidate.StartsWith(input, StringComparison.Ordinal);
+
+            if (isMatch)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// 現在のかな文字に対応するローマ字候補を取得する
     /// かな文字が促音（っ）の場合は、次のかな文字のローマ字候補の頭文字も含めて取得する
     /// </summary>
-    /// <returns></returns>
     string[] GetCandidatesForCurrentKana()
     {
         if (currentKanaIndex >= rubyUnits.Count)
         {
-            return new string[0];
+            return Array.Empty<string>();
         }
 
         string kana = rubyUnits[currentKanaIndex];
+        string[] candidates = HiraganaRomajiDictionary.GetCandidatesOrEmpty(kana);
 
-        // かな文字に対応するローマ字候補を取得する
-        if (!HiraganaRomajiDictionary.TryGetCandidates(kana, out var candidates))
-        {
-            return new string[0];
-        }
-
-        // 促音（っ）の場合は、次のかな文字のローマ字候補の頭文字も含めて取得する
-        if (kana != "っ")
+        // 促音だけは、次のかなの頭子音を許容して入力しやすくする。
+        if (kana != SokuonKana)
         {
             return candidates;
         }
 
-        List<string> mergedCandidates = new List<string>(candidates);
+        return MergeSokuonCandidates(candidates);
+    }
 
-        // 次のかな文字のローマ字候補の頭文字を取得する
+    /// <summary>
+    /// 促音の基本候補に加えて、次のかなの頭子音を単独入力候補として補完する。
+    /// </summary>
+    string[] MergeSokuonCandidates(string[] baseCandidates)
+    {
+        List<string> mergedCandidates = new List<string>(baseCandidates);
+
         if (currentKanaIndex + 1 < rubyUnits.Count &&
             HiraganaRomajiDictionary.TryGetCandidates(rubyUnits[currentKanaIndex + 1], out var nextCandidates))
         {
@@ -233,10 +239,10 @@ public class TypingController : MonoBehaviour
 
                 char initial = nextCandidate[0];
 
-                // 促音の後に続く文字が母音や長音記号でない場合のみ、頭文字を追加する
-                if (IsSokuonCandidateInitial(initial) && !mergedCandidates.Contains(initial.ToString()))
+                string initialText = initial.ToString();
+                if (IsSokuonCandidateInitial(initial) && !mergedCandidates.Contains(initialText))
                 {
-                    mergedCandidates.Add(initial.ToString());
+                    mergedCandidates.Add(initialText);
                 }
             }
         }
@@ -245,7 +251,7 @@ public class TypingController : MonoBehaviour
     }
 
     /// <summary>
-    /// 促音の後に続く文字が母音や長音記号でないかどうかを判定する
+    /// 促音の直後に来る頭文字として自然な子音だけを許可する。
     /// </summary>
     bool IsSokuonCandidateInitial(char initial)
     {
@@ -253,7 +259,7 @@ public class TypingController : MonoBehaviour
     }
 
     /// <summary>
-    /// かな文字列を単位ごとに分割してリストに格納する
+    /// かな文字列を、拗音を優先しながら入力判定単位へ分割する。
     /// </summary>
     void BuildRubyUnits()
     {
@@ -263,7 +269,7 @@ public class TypingController : MonoBehaviour
         {
             if (i + 1 < rubySentence.Length)
             {
-                // 2文字のかな文字が存在する場合は、2文字のかな文字を優先して取得する
+                // 2文字かなが候補辞書にある場合は、1文字より優先してまとめる。
                 string pair = rubySentence.Substring(i, 2);
                 if (HiraganaRomajiDictionary.TryGetCandidates(pair, out _))
                 {
@@ -273,7 +279,6 @@ public class TypingController : MonoBehaviour
                 }
             }
 
-            // 2文字のかな文字が存在しない場合は、1文字のかな文字を取得する
             rubyUnits.Add(rubySentence[i].ToString());
         }
     }

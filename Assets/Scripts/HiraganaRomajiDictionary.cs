@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
 
 public static class HiraganaRomajiDictionary
 {
+    static readonly string[] EmptyCandidates = Array.Empty<string>();
+
     // かな1文字または2文字のかな単位ごとのローマ字候補。先頭要素はガイド表示用の既定表記。
     static readonly Dictionary<string, string[]> Map = new Dictionary<string, string[]>
     {
@@ -169,6 +172,25 @@ public static class HiraganaRomajiDictionary
     public static bool TryGetCandidates(char kana, out string[] candidates)
     {
         return TryGetCandidates(kana.ToString(), out candidates);
+    }
+
+    /// <summary>
+    /// かな文字に対応するローマ字候補を取得する。
+    /// 候補が存在しない場合でも、呼び出し元で null チェックをしなくてよいよう空配列を返す。
+    /// </summary>
+    public static string[] GetCandidatesOrEmpty(string kana)
+    {
+        return TryGetCandidates(kana, out var candidates) ? candidates : EmptyCandidates;
+    }
+
+    /// <summary>
+    /// ガイド表示に使う代表的なローマ字候補を取得する。
+    /// 候補が無い場合は、元のかな文字列をそのまま返す。
+    /// </summary>
+    public static string GetPrimaryCandidateOrKana(string kana)
+    {
+        var candidates = GetCandidatesOrEmpty(kana);
+        return candidates.Length > 0 ? candidates[0] : kana;
     }
 
     public static bool TryGetCandidates(string kana, out string[] candidates)
