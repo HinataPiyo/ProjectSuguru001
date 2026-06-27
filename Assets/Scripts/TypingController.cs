@@ -16,14 +16,6 @@ public class TypingController : MonoBehaviour
 
     [SerializeField] QuestionController questionController;
 
-    void Awake()
-    {
-        if (questionController == null)
-        {
-            questionController = GetComponent<QuestionController>();
-        }
-    }
-
     void OnEnable()
     {
         // 現在の問題文に同期してからイベント購読を行う。
@@ -81,7 +73,6 @@ public class TypingController : MonoBehaviour
         if (!IsSupportedInputChar(normalizedKey)) return;
 
         bool isCorrect = TryConsumeRomanInput(normalizedKey);
-        Debug.Log($"Input: {normalizedKey}, Correct: {isCorrect}");
 
         if (!isCorrect) return;
 
